@@ -292,7 +292,14 @@ export default function Demo({ meta }: { me: Me; meta: Meta }) {
     : speaking === "pending" ? `${who} is speaking`
     : speaking && speaking !== "summary" ? "Bolo is speaking"
     : pending ? "Bolo is thinking…" : `Connected · ${mmss(elapsed)}`;
-  const En = ({ text }: { text: string | null | undefined }) => (text && en[text] ? <div className="en">{en[text]}</div> : null);
+  const isEng = (code?: string | null) => !code || code.startsWith("en");
+  const En = ({ text, langCode }: { text: string | null | undefined; langCode?: string | null }) => {
+    if (!text || !en[text]) return null;
+    const l = langCode !== undefined ? langCode : youLang;
+    if (isEng(l)) return null;
+    if (en[text].trim().toLowerCase() === text.trim().toLowerCase()) return null;
+    return <div className="en">{en[text]}</div>;
+  };
 
   return (
     <div className="demo">
@@ -358,7 +365,7 @@ export default function Demo({ meta }: { me: Me; meta: Meta }) {
               <div className="bubble" data-side="contact">
                 <div className="who">You said</div>
                 <div className="said" lang={youLang.slice(0, 2)}>{task.original_request}</div>
-                <En text={task.original_request} />
+                <En text={task.original_request} langCode={youLang} />
               </div>
               {!reported && (dialing || phase === "live") && (
                 <p className="small">{human
@@ -371,7 +378,7 @@ export default function Demo({ meta }: { me: Me; meta: Meta }) {
                 <div className="bubble" data-side="agent" data-speaking={speaking === "summary"}>
                   <div className="who">Bolo's result for you, in {lang(task.requester_language)}</div>
                   <div className="said" lang={task.requester_language.slice(0, 2)}>{task.result_summary}</div>
-                  <En text={task.result_summary} />
+                  <En text={task.result_summary} langCode={task.requester_language} />
                 </div>
               )}
             </>
@@ -458,14 +465,14 @@ export default function Demo({ meta }: { me: Me; meta: Meta }) {
                   <div key={t.id} className="bubble" data-side={t.speaker === "agent" ? "agent" : "contact"} data-speaking={speaking === t.id}>
                     <div className="who">{t.speaker === "agent" ? "Bolo (AI assistant)" : who}{t.intent === "clarify" ? " · follow-up" : ""}</div>
                     <div className="said" lang={callLang.slice(0, 2)}>{t.text}</div>
-                    <En text={t.text} />
+                    <En text={t.text} langCode={t.language} />
                   </div>
                 ))}
                 {pending && (
                   <div className="bubble" data-side="contact" data-speaking={speaking === "pending"}>
                     <div className="who">{who}</div>
                     <div className="said" lang={callLang.slice(0, 2)}>{pending}</div>
-                    <En text={pending} />
+                    <En text={pending} langCode={themLang} />
                   </div>
                 )}
                 {phase === "ended" && <p className="small" style={{ alignSelf: "center" }}>— Call ended —</p>}
@@ -528,10 +535,20 @@ function DetailsPanel({ task, meta, youLang, busy, en, onSubmit }: {
       onSubmit({ note: note.trim() || undefined, contact_phone: phone || undefined, recipient_language: rlang || undefined });
     }}>
       <div className="label">{stuck ? "Bolo needs your help to continue" : "Bolo needs a little more from you"}</div>
-      {stuck && task.status_detail && <p className="small" style={{ margin: 0 }}>{task.status_detail}{en[task.status_detail] && <span className="en"> {en[task.status_detail]}</span>}</p>}
+      {stuck && task.status_detail && (
+        <p className="small" style={{ margin: 0 }}>
+          {task.status_detail}
+          {!youLang.startsWith("en") && en[task.status_detail] && en[task.status_detail].trim().toLowerCase() !== task.status_detail.trim().toLowerCase() && (
+            <span className="en"> {en[task.status_detail]}</span>
+          )}
+        </p>
+      )}
       {questions.length > 0 && (
         <ul style={{ margin: 0, paddingLeft: 20, fontWeight: 650 }}>
-          {questions.map((q) => <li key={q} lang={tongue}>{q}{en[q] && <div className="en">{en[q]}</div>}</li>)}
+          {questions.map((q) => {
+            const showSub = !youLang.startsWith("en") && en[q] && en[q].trim().toLowerCase() !== q.trim().toLowerCase();
+            return <li key={q} lang={tongue}>{q}{showSub && <div className="en">{en[q]}</div>}</li>;
+          })}
         </ul>
       )}
       {needPhone && (
