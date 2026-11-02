@@ -200,6 +200,10 @@ class PushSubscription(Base):
 
 
 def make_engine(url: str = config.DATABASE_URL):
+    if url.startswith("postgres://"):
+        url = "postgresql+psycopg://" + url[len("postgres://"):]
+    elif url.startswith("postgresql://") and "+psycopg" not in url:
+        url = "postgresql+psycopg://" + url[len("postgresql://"):]
     eng = create_engine(url, connect_args={"check_same_thread": False} if url.startswith("sqlite") else {})
     if url.startswith("sqlite"):
         @event.listens_for(eng, "connect")

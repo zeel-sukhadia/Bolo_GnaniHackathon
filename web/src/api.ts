@@ -10,6 +10,7 @@ export interface Me {
   id: string; email: string; display_name: string; language: string | null;
   approve_every_call: boolean; allow_auto_redial: boolean; timezone: string;
   quiet_start_hour: number | null; quiet_end_hour: number | null;
+  token?: string;
 }
 export interface Meta {
   languages: Record<string, string>; telephony_mode: string; vapid_public_key: string | null;
@@ -40,12 +41,21 @@ export class ApiError extends Error {
   constructor(public status: number, message: string, public retryable = false) { super(message); }
 }
 
+const TOKEN_KEY = "bolo_session_token";
+
 async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
   let res: Response;
+  const token = typeof localStorage !== "undefined" ? localStorage.getItem(TOKEN_KEY) : null;
+  const headers: Record<string, string> = {};
+  if (token) headers["Authorization"] = `Bearer ${token}`;
+  if (!(body instanceof FormData) && body !== undefined) {
+    headers["Content-Type"] = "application/json";
+  }
+
   try {
     res = await fetch(`/api${path}`, {
       method, credentials: "same-origin",
-      headers: body instanceof FormData || body === undefined ? undefined : { "Content-Type": "application/json" },
+      headers,
       body: body instanceof FormData ? body : body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
@@ -55,6 +65,9 @@ async function req<T>(method: string, path: string, body?: unknown): Promise<T> 
   if (!res.ok) {
     const d = (data as any).detail;
     const msg = typeof d === "string" ? d : Array.isArray(d) ? d.map((x: any) => x.msg).join("; ") : `Error ${res.status}`;
+    if (res.status === 401 && typeof localStorage !== "undefined") {
+      localStorage.removeItem(TOKEN_KEY);
+    }
     throw new ApiError(res.status, msg, Boolean((data as any).retryable));
   }
   return data as T;
@@ -66,9 +79,20 @@ export const api = {
   meta: () => req<Meta>("GET", "/meta"),
   evonHealth: () => req<EvonHealth>("GET", "/evon/health"),
   me: () => req<Me>("GET", "/me"),
-  register: (email: string, password: string, display_name: string) => req<Me>("POST", "/auth/register", { email, password, display_name }),
-  login: (email: string, password: string) => req<Me>("POST", "/auth/login", { email, password }),
-  logout: () => req("POST", "/auth/logout"),
+  register: async (email: string, password: string, display_name: string) => {
+    const me = await req<Me>("POST", "/auth/register", { email, password, display_name });
+    if (me.token && typeof localStorage !== "undefined") localStorage.setItem(TOKEN_KEY, me.token);
+    return me;
+  },
+  login: async (email: string, password: string) => {
+    const me = await req<Me>("POST", "/auth/login", { email, password });
+    if (me.token && typeof localStorage !== "undefined") localStorage.setItem(TOKEN_KEY, me.token);
+    return me;
+  },
+  logout: async () => {
+    if (typeof localStorage !== "undefined") localStorage.removeItem(TOKEN_KEY);
+    return req("POST", "/auth/logout");
+  },
   updateMe: (p: Partial<Me>) => req<Me>("PATCH", "/me", p),
 
   contacts: () => req<Contact[]>("GET", "/contacts"),

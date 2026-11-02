@@ -13,7 +13,8 @@ def _env(name: str, default: str = "") -> str:
 
 DATABASE_URL = _env("DATABASE_URL", "sqlite:///./agent.db")
 SESSION_DAYS = int(_env("SESSION_DAYS", "14"))
-COOKIE_SECURE = _env("COOKIE_SECURE", "false").lower() == "true"
+COOKIE_SECURE = _env("COOKIE_SECURE", "true" if os.environ.get("VERCEL") else "false").lower() == "true"
+SYNC_PLANNING = _env("SYNC_PLANNING", "true" if os.environ.get("VERCEL") else "false").lower() == "true"
 RETENTION_DAYS = int(_env("RETENTION_DAYS", "30"))
 MAX_CALL_ATTEMPTS = int(_env("MAX_CALL_ATTEMPTS", "3"))
 REDIAL_BACKOFF_SECONDS = [int(s) for s in _env("REDIAL_BACKOFF_SECONDS", "120,600").split(",")]

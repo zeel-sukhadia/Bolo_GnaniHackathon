@@ -75,19 +75,24 @@ def _token_hash(token: str) -> str:
 
 def current_user(request: Request, db: DB = Depends(get_db)) -> User:
     token = request.cookies.get(COOKIE)
+    if not token:
+        auth = request.headers.get("Authorization")
+        if auth and auth.startswith("Bearer "):
+            token = auth[7:].strip()
     s = db.get(Session, _token_hash(token)) if token else None
     if not s or s.expires_at < now():
         raise HTTPException(401, "Not signed in")
     return db.get(User, s.user_id)
 
 
-def _start_session(db: DB, user: User, response: Response):
+def _start_session(db: DB, user: User, response: Response) -> str:
     token = secrets.token_urlsafe(32)
     db.add(Session(token_hash=_token_hash(token), user_id=user.id,
                    expires_at=now() + timedelta(days=config.SESSION_DAYS)))
     db.commit()
     response.set_cookie(COOKIE, token, httponly=True, samesite="lax", secure=config.COOKIE_SECURE,
-                        max_age=config.SESSION_DAYS * 86400)
+                        max_age=config.SESSION_DAYS * 86400, path="/")
+    return token
 
 
 class Credentials(BaseModel):
@@ -104,8 +109,10 @@ def register(body: Credentials, response: Response, db: DB = Depends(get_db)):
     user = User(email=email, password_hash=hash_password(body.password), display_name=body.display_name.strip())
     db.add(user)
     db.flush()
-    _start_session(db, user, response)
-    return me_out(user)
+    token = _start_session(db, user, response)
+    out = me_out(user)
+    out["token"] = token
+    return out
 
 
 @app.post("/api/auth/login")
@@ -113,16 +120,23 @@ def login(body: Credentials, response: Response, db: DB = Depends(get_db)):
     user = db.scalar(select(User).where(User.email == body.email.lower()))
     if not user or not check_password(body.password, user.password_hash):
         raise HTTPException(401, "Wrong email or password")
-    _start_session(db, user, response)
-    return me_out(user)
+    token = _start_session(db, user, response)
+    out = me_out(user)
+    out["token"] = token
+    return out
 
 
 @app.post("/api/auth/logout")
 def logout(request: Request, response: Response, db: DB = Depends(get_db)):
-    if token := request.cookies.get(COOKIE):
+    token = request.cookies.get(COOKIE)
+    if not token:
+        auth = request.headers.get("Authorization")
+        if auth and auth.startswith("Bearer "):
+            token = auth[7:].strip()
+    if token:
         db.execute(delete(Session).where(Session.token_hash == _token_hash(token)))
         db.commit()
-    response.delete_cookie(COOKIE)
+    response.delete_cookie(COOKIE, path="/")
     return {"ok": True}
 
 
@@ -272,6 +286,18 @@ class TaskIn(BaseModel):
     requester_language: str | None = None  # defaults to the account language
 
 
+
+def _trigger_planning(db: DB, task: Task, user: User, bg: BackgroundTasks | None = None):
+    if config.SYNC_PLANNING:
+        try:
+            engine.run_planning(db, task, user)
+            db.commit()
+        except Exception:
+            db.rollback()
+            log.exception("planning failed for %s", task.id)
+    elif bg:
+        _trigger_planning(db, task, user, bg)
+
 def _plan_in_background(task_id: str):
     with SessionLocal() as db:
         task = db.get(Task, task_id)
@@ -311,7 +337,7 @@ def create_task(body: TaskIn, bg: BackgroundTasks, user: User = Depends(current_
         engine.resolve_contact(db, task, body.contact_name, body.contact_phone, body.contact_id)
     engine.begin_planning(db, task)
     db.commit()
-    bg.add_task(_plan_in_background, task.id)
+    _trigger_planning(db, task, user, bg)
     return task_out(task)
 
 
@@ -347,7 +373,7 @@ def task_inputs(tid: str, body: InputsIn, bg: BackgroundTasks, user: User = Depe
     engine.provide_inputs(db, task, user, body.note, body.contact_id, body.contact_name,
                           body.contact_phone, body.recipient_language)
     db.commit()
-    bg.add_task(_plan_in_background, task.id)
+    _trigger_planning(db, task, user, bg)
     return task_out(task)
 
 
@@ -371,7 +397,7 @@ def decide(tid: str, aid: str, body: DecisionIn, bg: BackgroundTasks, user: User
                            body.contact_phone, body.contact_id)
     db.commit()
     if task.state == "PLANNING":
-        bg.add_task(_plan_in_background, task.id)
+        _trigger_planning(db, task, user, bg)
     return task_out(task)
 
 
