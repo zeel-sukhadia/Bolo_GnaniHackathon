@@ -17,7 +17,7 @@ It's a goal-driven task engine, not a script for one scenario. Asking a bus cond
 
 ## The four features
 
-Everything in the product serves one of these four features (see `CLAUDE.md`):
+Everything in the product serves one of these four features:
 
 | # | Feature | Where it lives |
 |---|---|---|
