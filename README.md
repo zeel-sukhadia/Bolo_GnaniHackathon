@@ -538,4 +538,4 @@ For a hands-free recording, open `#/demo`. Claude plays the recipient and speaks
 - **Live end-to-end with real Evon:** not run, because no GPU was available. The remote client, error mapping and health check are tested with mocked HTTP. The Colab steps follow the official model card. Latency, quality and credit usage still need measuring.
 - **Phone numbers:** only Indian numbers (10 digits, normalized to `+91…`).
 - **PostgreSQL:** the code is dialect-neutral, but only SQLite has been tested.
-- **Native app:** not started. React Native comes after the web version is stable, per `CLAUDE.md`.
+- **Native app:** not started. React Native comes after the web version is stable.
