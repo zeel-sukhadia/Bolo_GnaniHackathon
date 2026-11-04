@@ -446,7 +446,6 @@ web/                     Vite + React + TypeScript PWA
   src/Demo.tsx           one-screen recording demo (#/demo)
   public/sw.js           service worker; public/manifest.webmanifest
 deploy/EVON_REMOTE_GPU.md  running Evon v3.3 on a Colab / rented GPU
-CLAUDE.md                product spec and scope rules
 ```
 
 ---
