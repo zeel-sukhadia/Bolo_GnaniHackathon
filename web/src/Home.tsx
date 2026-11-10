@@ -24,7 +24,7 @@ export default function Home({ me, meta }: { me: Me; meta: Meta }) {
     <>
       <section className="split">
         <div className="plane">
-          <p className="eyebrow">You speaks your language,Bolo speaks theirs🗣️✨</p>
+          <p className="eyebrow">You speak your language,Bolo speaks theirs🗣️✨</p>
           <h1 className="display">Say what you need. I'll make the call.</h1>
         </div>
         <div className="plane plane-red stack" style={{ display: "grid", justifyItems: "center", alignContent: "center", gap: 28 }}>
